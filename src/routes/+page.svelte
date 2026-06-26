@@ -20,23 +20,45 @@
 
   onMount(async () => {
     try {
+      // Load the friendly MSOA names first and build a code -> name lookup
+      const nameLookup = new Map();
+      try {
+        const nameRes = await fetch('/data/msoa-names.csv');
+        if (nameRes.ok) {
+          let nameText = await nameRes.text();
+          nameText = nameText.replace(/^\uFEFF/, '');
+          const nameParsed = Papa.parse(nameText, { header: true, skipEmptyLines: true });
+          for (const n of nameParsed.data) {
+            const code = (n['msoa21cd'] ?? '').trim();
+            const friendly = (n['msoa21hclnm'] ?? '').trim();
+            if (code) nameLookup.set(code, friendly);
+          }
+        }
+      } catch (e) {
+        // If names file is missing, we fall back to the code-based label
+      }
+
       const res = await fetch('/data/msoa-summary.csv');
       if (!res.ok) throw new Error('Could not find /data/msoa-summary.csv');
       let text = await res.text();
       text = text.replace(/^\uFEFF/, '');
       const parsed = Papa.parse(text, { header: true, skipEmptyLines: true });
-      rows = parsed.data.map((r) => ({
-        district: (r['District'] ?? '').trim(),
-        msoaName: (r['MSOA21'] ?? '').trim(),
-        msoaCode: (r['MSOACD21'] ?? '').trim(),
-        topic: (r['Topic'] ?? '').trim(),
-        indicator: (r['Indicator'] ?? '').trim(),
-        measure: (r['Measure'] ?? '').trim(),
-        source: (r['Source'] ?? '').trim(),
-        value: r['Value'],
-        lowerCI: r['Lower CI'],
-        upperCI: r['Upper CI']
-      }));
+      rows = parsed.data.map((r) => {
+        const code = (r['MSOACD21'] ?? '').trim();
+        const friendly = nameLookup.get(code);
+        return {
+          district: (r['District'] ?? '').trim(),
+          msoaName: friendly || (r['MSOA21'] ?? '').trim(),
+          msoaCode: code,
+          topic: (r['Topic'] ?? '').trim(),
+          indicator: (r['Indicator'] ?? '').trim(),
+          measure: (r['Measure'] ?? '').trim(),
+          source: (r['Source'] ?? '').trim(),
+          value: r['Value'],
+          lowerCI: r['Lower CI'],
+          upperCI: r['Upper CI']
+        };
+      });
     } catch (e) {
       loadError = e.message;
     } finally {
@@ -108,7 +130,6 @@
 <div class="page">
   <header class="ons-header">
     <div class="ons-header__inner">
-      <p class="ons-header__org">Hampshire County Council · Public Health Intelligence</p>
       <h1>JSNA Area Case Study Tool</h1>
       <p class="ons-header__sub">MSOA-level data summary across Hampshire</p>
     </div>
@@ -217,10 +238,6 @@
     background: #fff;
   }
   .ons-header__inner { max-width: 1200px; margin: 0 auto; padding: 24px 24px 28px; }
-  .ons-header__org {
-    margin: 0 0 4px; font-size: 13px; text-transform: uppercase;
-    letter-spacing: 0.5px; color: #707070;
-  }
   .ons-header h1 { margin: 0; font-size: 30px; font-weight: 700; color: #222; }
   .ons-header__sub { margin: 6px 0 0; color: #555; font-size: 16px; }
 
