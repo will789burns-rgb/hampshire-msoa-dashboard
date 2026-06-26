@@ -1,6 +1,8 @@
 <script>
   import { onMount, tick } from 'svelte';
   import { getStore, loadData } from '$lib/data.svelte.js';
+  import DataTable from '$lib/DataTable.svelte';
+  import ChartView from '$lib/ChartView.svelte';
   const store = getStore();
 
   const SECTIONS = ['Demography', 'Births and Deaths', 'Lives', 'People', 'Place', 'Major conditions'];
@@ -256,19 +258,7 @@
         </div>
 
         {#if view === 'table'}
-          <div class="table-wrap">
-            <table>
-              <thead>
-                <tr><th>District</th><th>MSOA</th><th>Code</th><th class="num">Value</th><th class="num">Lower CI</th><th class="num">Upper CI</th></tr>
-              </thead>
-              <tbody>
-                {#each tableRows as r (r.msoaCode)}
-                  <tr><td>{r.district}</td><td>{r.msoaName}</td><td>{r.msoaCode}</td><td class="num">{fmt(r.value)}</td><td class="num">{fmt(r.lowerCI)}</td><td class="num">{fmt(r.upperCI)}</td></tr>
-                {/each}
-                {#if tableRows.length === 0}<tr><td colspan="6" class="empty">No data for this selection.</td></tr>{/if}
-              </tbody>
-            </table>
-          </div>
+          <DataTable rows={tableRows} {fmt} />
           <p class="rowcount">{tableRows.length} areas shown</p>
 
         {:else if view === 'map'}
@@ -287,36 +277,7 @@
           {/if}
 
         {:else}
-          {#if chartData.length}
-            <p class="chart-caption">
-              MSOAs ranked by value, highest to lowest.
-              {#if districtFilter}<strong>{districtFilter}</strong> highlighted.{/if}
-              Dashed line = Hampshire average ({fmt(stats.avg)}).
-            </p>
-            <div class="chart-wrap">
-              <svg viewBox={`0 0 ${CH.w} ${CH.h}`} class="chart" role="img" aria-label="Ranked bar chart of MSOAs">
-                <line x1={CH.left} x2={CH.w - CH.right} y1={avgY} y2={avgY} stroke="#d4351c" stroke-width="2" stroke-dasharray="6 4" />
-                <text x={CH.w - CH.right} y={avgY - 5} text-anchor="end" font-size="12" fill="#d4351c">Hampshire avg {fmt(stats.avg)}</text>
-                {#each chartData as d, i}
-                  <rect
-                    x={xFor(i)} y={yFor(d.value)} width={barW} height={barHeight(d.value)}
-                    fill={d.inFilter ? '#206095' : '#cfd8e0'}
-                    onmouseenter={() => (hover = { ...d, x: xFor(i) + barW / 2, y: yFor(d.value) })}
-                    onmouseleave={() => (hover = null)}
-                  />
-                {/each}
-                <line x1={CH.left} x2={CH.w - CH.right} y1={CH.top + plotH} y2={CH.top + plotH} stroke="#222" stroke-width="1" />
-              </svg>
-              {#if hover}
-                <div class="tip" style={`left:${(hover.x / CH.w) * 100}%; top:${(hover.y / CH.h) * 100}%;`}>
-                  <strong>{hover.name}</strong><br />{hover.district}<br />{fmt(hover.value)}
-                </div>
-              {/if}
-            </div>
-            <p class="rowcount">{chartData.filter((d) => d.inFilter).length} of {chartData.length} MSOAs highlighted</p>
-          {:else}
-            <p class="empty">No data for this selection.</p>
-          {/if}
+          <ChartView {chartData} {stats} {districtFilter} {fmt} />
         {/if}
 
         {#if sourceNote}<p class="source">{sourceNote}</p>{/if}
