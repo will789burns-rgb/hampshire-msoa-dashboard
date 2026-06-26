@@ -1,13 +1,10 @@
 <script>
   import { onMount, tick } from 'svelte';
-  import Papa from 'papaparse';
+  import { getStore, loadData } from '$lib/data.svelte.js';
+  const store = getStore();
 
   const SECTIONS = ['Demography', 'Births and Deaths', 'Lives', 'People', 'Place', 'Major conditions'];
 
-  let rows = $state([]);
-  let geo = $state(null);
-  let loading = $state(true);
-  let loadError = $state('');
   let selectedTopic = $state('Demography');
   let selectedIndicator = $state('');
   let search = $state('');
@@ -20,61 +17,17 @@
   let geoLayer;
 
   onMount(async () => {
-    try {
-      const nameLookup = new Map();
-      try {
-        const nameRes = await fetch('/data/msoa-names.csv');
-        if (nameRes.ok) {
-          let nameText = (await nameRes.text()).replace(/^\uFEFF/, '');
-          const nameParsed = Papa.parse(nameText, { header: true, skipEmptyLines: true });
-          for (const n of nameParsed.data) {
-            const code = (n['msoa21cd'] ?? '').trim();
-            const friendly = (n['msoa21hclnm'] ?? '').trim();
-            if (code) nameLookup.set(code, friendly);
-          }
-        }
-      } catch (e) {}
-
-      const res = await fetch('/data/msoa-summary.csv');
-      if (!res.ok) throw new Error('Could not find /data/msoa-summary.csv');
-      let text = (await res.text()).replace(/^\uFEFF/, '');
-      const parsed = Papa.parse(text, { header: true, skipEmptyLines: true });
-      rows = parsed.data.map((r) => {
-        const code = (r['MSOACD21'] ?? '').trim();
-        return {
-          district: (r['District'] ?? '').trim(),
-          msoaName: nameLookup.get(code) || (r['MSOA21'] ?? '').trim(),
-          msoaCode: code,
-          topic: (r['Topic'] ?? '').trim(),
-          indicator: (r['Indicator'] ?? '').trim(),
-          measure: (r['Measure'] ?? '').trim(),
-          source: (r['Source'] ?? '').trim(),
-          value: r['Value'],
-          lowerCI: r['Lower CI'],
-          upperCI: r['Upper CI']
-        };
-      });
-
-      try {
-        const geoRes = await fetch('/data/msoa-boundaries.geojson');
-        if (geoRes.ok) geo = await geoRes.json();
-      } catch (e) {}
-
-      const leaflet = await import('leaflet');
-      L = leaflet.default ?? leaflet;
-    } catch (e) {
-      loadError = e.message;
-    } finally {
-      loading = false;
-    }
+    await loadData();
+    const leaflet = await import('leaflet');
+    L = leaflet.default ?? leaflet;
   });
 
   const districts = $derived(
-    [...new Set(rows.map((r) => r.district))].filter(Boolean).sort((a, b) => a.localeCompare(b))
+    [...new Set(store.rows.map((r) => r.district))].filter(Boolean).sort((a, b) => a.localeCompare(b))
   );
 
   const indicators = $derived(
-    [...new Set(rows.filter((r) => r.topic === selectedTopic).map((r) => r.indicator))]
+    [...new Set(store.rows.filter((r) => r.topic === selectedTopic).map((r) => r.indicator))]
       .filter(Boolean)
       .sort((a, b) => a.localeCompare(b))
   );
@@ -86,7 +39,7 @@
   });
 
   const indicatorRows = $derived(
-    rows.filter((r) => r.topic === selectedTopic && r.indicator === selectedIndicator && r.msoaCode)
+    store.rows.filter((r) => r.topic === selectedTopic && r.indicator === selectedIndicator && r.msoaCode)
   );
 
   const currentRows = $derived(
@@ -119,11 +72,8 @@
     return { min, max, avg, mid: (min + max) / 2 };
   });
 
-  // ---- Chart data ----
-  // All MSOAs for the indicator, sorted high to low, with a flag for whether each
-  // is in the selected district (when a filter is active).
   const chartData = $derived.by(() => {
-    const data = indicatorRows
+    return indicatorRows
       .map((r) => ({
         name: r.msoaName,
         district: r.district,
@@ -132,13 +82,11 @@
       }))
       .filter((d) => !Number.isNaN(d.value))
       .sort((a, b) => b.value - a.value);
-    return data;
   });
 
   const chartMax = $derived(chartData.length ? Math.max(...chartData.map((d) => d.value)) : 0);
   const chartMin = $derived(chartData.length ? Math.min(0, ...chartData.map((d) => d.value)) : 0);
 
-  // SVG geometry
   const CH = { w: 820, h: 420, left: 8, right: 8, top: 16, bottom: 28 };
   const plotW = $derived(CH.w - CH.left - CH.right);
   const plotH = $derived(CH.h - CH.top - CH.bottom);
@@ -174,22 +122,13 @@
     search = '';
   }
 
-  async function showMap() {
-    view = 'map';
-    await buildMap();
-  }
-  function showTable() {
-    view = 'table';
-    if (map) { map.remove(); map = null; }
-  }
-  function showChart() {
-    view = 'chart';
-    if (map) { map.remove(); map = null; }
-  }
+  async function showMap() { view = 'map'; await buildMap(); }
+  function showTable() { view = 'table'; if (map) { map.remove(); map = null; } }
+  function showChart() { view = 'chart'; if (map) { map.remove(); map = null; } }
 
   async function buildMap() {
     await tick();
-    if (!L || !geo || !mapEl) return;
+    if (!L || !store.geo || !mapEl) return;
     if (map) { map.remove(); map = null; }
     map = L.map(mapEl, { scrollWheelZoom: true }).setView([51.05, -1.3], 9);
     L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
@@ -202,10 +141,10 @@
   }
 
   function drawLayer() {
-    if (!map || !L || !geo) return;
+    if (!map || !L || !store.geo) return;
     if (geoLayer) { geoLayer.remove(); geoLayer = null; }
     const { min, max } = stats;
-    geoLayer = L.geoJSON(geo, {
+    geoLayer = L.geoJSON(store.geo, {
       filter: (f) => visibleCodes.has(f.properties.MSOA21CD),
       style: (f) => {
         const v = valueByCode.get(f.properties.MSOA21CD);
@@ -252,7 +191,7 @@
     URL.revokeObjectURL(url);
   }
 
-  let hover = $state(null); // {name, district, value, x, y}
+  let hover = $state(null);
 </script>
 
 <svelte:head>
@@ -275,10 +214,10 @@
     </nav>
 
     <main class="content">
-      {#if loading}
+      {#if store.loading}
         <p class="status">Loading data…</p>
-      {:else if loadError}
-        <div class="error"><strong>Couldn’t load the data.</strong><p>{loadError}</p></div>
+      {:else if store.error}
+        <div class="error"><strong>Couldn’t load the data.</strong><p>{store.error}</p></div>
       {:else}
         <h2>{selectedTopic}</h2>
 
@@ -336,7 +275,7 @@
           {#key view}
             <div class="map" bind:this={mapEl}></div>
           {/key}
-          {#if !geo}
+          {#if !store.geo}
             <p class="status">Map boundaries not found at <code>static/data/msoa-boundaries.geojson</code>.</p>
           {:else if valueByCode.size}
             <div class="legend">
@@ -356,26 +295,18 @@
             </p>
             <div class="chart-wrap">
               <svg viewBox={`0 0 ${CH.w} ${CH.h}`} class="chart" role="img" aria-label="Ranked bar chart of MSOAs">
-                <!-- average line -->
                 <line x1={CH.left} x2={CH.w - CH.right} y1={avgY} y2={avgY} stroke="#d4351c" stroke-width="2" stroke-dasharray="6 4" />
                 <text x={CH.w - CH.right} y={avgY - 5} text-anchor="end" font-size="12" fill="#d4351c">Hampshire avg {fmt(stats.avg)}</text>
-
                 {#each chartData as d, i}
                   <rect
-                    x={xFor(i)}
-                    y={yFor(d.value)}
-                    width={barW}
-                    height={barHeight(d.value)}
+                    x={xFor(i)} y={yFor(d.value)} width={barW} height={barHeight(d.value)}
                     fill={d.inFilter ? '#206095' : '#cfd8e0'}
                     onmouseenter={() => (hover = { ...d, x: xFor(i) + barW / 2, y: yFor(d.value) })}
                     onmouseleave={() => (hover = null)}
                   />
                 {/each}
-
-                <!-- baseline -->
                 <line x1={CH.left} x2={CH.w - CH.right} y1={CH.top + plotH} y2={CH.top + plotH} stroke="#222" stroke-width="1" />
               </svg>
-
               {#if hover}
                 <div class="tip" style={`left:${(hover.x / CH.w) * 100}%; top:${(hover.y / CH.h) * 100}%;`}>
                   <strong>{hover.name}</strong><br />{hover.district}<br />{fmt(hover.value)}
