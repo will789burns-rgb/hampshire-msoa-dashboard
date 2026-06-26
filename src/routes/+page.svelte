@@ -86,23 +86,6 @@
       .sort((a, b) => b.value - a.value);
   });
 
-  const chartMax = $derived(chartData.length ? Math.max(...chartData.map((d) => d.value)) : 0);
-  const chartMin = $derived(chartData.length ? Math.min(0, ...chartData.map((d) => d.value)) : 0);
-
-  const CH = { w: 820, h: 420, left: 8, right: 8, top: 16, bottom: 28 };
-  const plotW = $derived(CH.w - CH.left - CH.right);
-  const plotH = $derived(CH.h - CH.top - CH.bottom);
-  const barGap = 1;
-  const barW = $derived(chartData.length ? Math.max(1, plotW / chartData.length - barGap) : 0);
-
-  function xFor(i) { return CH.left + i * (plotW / Math.max(1, chartData.length)); }
-  function yFor(v) {
-    const range = chartMax - chartMin || 1;
-    return CH.top + plotH - ((v - chartMin) / range) * plotH;
-  }
-  function barHeight(v) { return CH.top + plotH - yFor(v); }
-  const avgY = $derived(yFor(stats.avg));
-
   function fmt(v) {
     if (v === null || v === undefined || String(v).trim() === '') return '—';
     const n = Number(v);
@@ -192,8 +175,6 @@
     a.click();
     URL.revokeObjectURL(url);
   }
-
-  let hover = $state(null);
 </script>
 
 <svelte:head>
@@ -326,27 +307,12 @@
   .tab:hover { background: #f3f3f3; }
   .tab.active { color: #003c57; border-bottom-color: #206095; }
 
-  .table-wrap { overflow-x: auto; border-top: 2px solid #222; }
-  table { width: 100%; border-collapse: collapse; font-size: 14px; }
-  thead th { text-align: left; padding: 10px 12px; border-bottom: 2px solid #222; font-weight: 700; white-space: nowrap; }
-  tbody td { padding: 9px 12px; border-bottom: 1px solid #d9d9d9; }
-  .num { text-align: right; font-variant-numeric: tabular-nums; }
-  tbody tr:hover { background: #f5f5f6; }
-  .empty { text-align: center; color: #707070; padding: 24px; }
-
   .map { height: 560px; width: 100%; border: 1px solid #d9d9d9; }
   .legend { margin-top: 12px; max-width: 280px; }
   .legend-title { font-size: 13px; font-weight: 600; color: #333; margin-bottom: 6px; }
   .legend-bar { height: 14px; width: 100%; background: linear-gradient(to right, #e6f3ff, #206095); border: 1px solid #ccc; }
   .legend-ticks { display: flex; justify-content: space-between; font-size: 12px; color: #555; margin-top: 4px; }
   .legend-avg { font-size: 13px; color: #206095; margin-top: 8px; }
-
-  .chart-caption { font-size: 13px; color: #555; margin: 0 0 12px; }
-  .chart-wrap { position: relative; border: 1px solid #d9d9d9; padding: 8px; }
-  .chart { width: 100%; height: auto; display: block; }
-  .chart rect { cursor: pointer; }
-  .chart rect:hover { fill: #003c57 !important; }
-  .tip { position: absolute; transform: translate(-50%, -110%); background: #222; color: #fff; font-size: 12px; padding: 6px 8px; border-radius: 3px; pointer-events: none; white-space: nowrap; z-index: 5; }
 
   .rowcount { font-size: 13px; color: #707070; margin: 10px 0 0; }
   .source { font-size: 12px; color: #909090; margin: 8px 0 0; }
