@@ -215,6 +215,8 @@
       }
     });
 
+    // First pass: draw the lines and end dots, and collect label positions
+    const labels = [];
     for (const s of series) {
       const pts = s.points.filter(p => p.value !== null && p.value !== undefined);
       if (pts.length < 2) continue;
@@ -222,7 +224,21 @@
       svg += `<path d="${d}" fill="none" stroke="${s.color}" stroke-width="${s.width ?? 2}" stroke-dasharray="${s.dash ?? ''}" stroke-linejoin="round" stroke-linecap="round"/>`;
       const last = pts.at(-1);
       svg += `<circle cx="${xScale(last.year)}" cy="${yScale(last.value)}" r="4" fill="${s.color}"/>`;
-      svg += `<text x="${W + 8}" y="${yScale(last.value) + 4}" font-size="11" fill="${s.color}" font-weight="${s.bold ? '700' : '400'}">${s.label}</text>`;
+      labels.push({ y: yScale(last.value), color: s.color, bold: s.bold, label: s.label });
+    }
+
+    // Spread labels apart so they don't overlap (minimum 14px gap)
+    labels.sort((a, b) => a.y - b.y);
+    const minGap = 14;
+    for (let i = 1; i < labels.length; i++) {
+      if (labels[i].y - labels[i - 1].y < minGap) {
+        labels[i].y = labels[i - 1].y + minGap;
+      }
+    }
+    // Keep them inside the chart vertically
+    for (const lab of labels) {
+      lab.y = Math.max(8, Math.min(H, lab.y));
+      svg += `<text x="${W + 8}" y="${lab.y + 4}" font-size="11" fill="${lab.color}" font-weight="${lab.bold ? '700' : '400'}">${lab.label}</text>`;
     }
     svg += `</g></svg>`;
     return svg;
