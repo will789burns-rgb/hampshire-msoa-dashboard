@@ -23,6 +23,7 @@
 		"vite": "^7.2.2"
 	},
 	"dependencies": {
+		"leaflet": "^1.9.4",
 		"papaparse": "^5.5.4"
 	}
 }
