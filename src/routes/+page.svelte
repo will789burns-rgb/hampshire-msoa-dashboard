@@ -21,6 +21,7 @@
     </p>
 
     <div class="cards">
+      <!-- MSOA TOOL -->
       <a href="/explore" class="card">
         <div class="card-tag">Available now</div>
         <h2>MSOA Data Summary</h2>
@@ -32,15 +33,16 @@
         <span class="card-link">Open tool →</span>
       </a>
 
-      <div class="card card--soon">
-        <div class="card-tag card-tag--soon">Coming soon</div>
+      <!-- DISTRICTS TOOL (NOW LIVE) -->
+      <a href="/districts" class="card">
+        <div class="card-tag">Available now</div>
         <h2>District Local Statistics</h2>
         <p>
           A Fingertips / OHID-style view of Hampshire's districts, with trends over time
           and comparisons against regional and national benchmarks, powered by live data feeds.
         </p>
-        <span class="card-link card-link--soon">In development</span>
-      </div>
+        <span class="card-link">Open tool →</span>
+      </a>
     </div>
   </div>
 </div>
@@ -48,35 +50,107 @@
 <style>
   @import url('https://fonts.googleapis.com/css2?family=Open+Sans:wght@400;600;700&display=swap');
 
-  :global(body) { margin: 0; font-family: 'Open Sans', Arial, sans-serif; color: #222; background: #fff; -webkit-font-smoothing: antialiased; }
+  :global(body) {
+    margin: 0;
+    font-family: 'Open Sans', Arial, sans-serif;
+    color: #222;
+    background: #fff;
+    -webkit-font-smoothing: antialiased;
+  }
+
   .page { min-height: 100vh; }
 
-  .ons-header { border-bottom: 1px solid #d9d9d9; box-shadow: inset 0 -8px 0 #206095; background: #fff; }
-  .ons-header__inner { max-width: 1100px; margin: 0 auto; padding: 28px 24px 32px; }
-  .ons-header h1 { margin: 0; font-size: 32px; font-weight: 700; color: #222; }
-  .ons-header__sub { margin: 8px 0 0; color: #555; font-size: 17px; }
+  .ons-header {
+    border-bottom: 1px solid #d9d9d9;
+    box-shadow: inset 0 -8px 0 #206095;
+    background: #fff;
+  }
 
-  .wrap { max-width: 1100px; margin: 0 auto; padding: 32px 24px 64px; }
-  .intro { font-size: 16px; color: #444; max-width: 720px; line-height: 1.6; margin: 0 0 32px; }
+  .ons-header__inner {
+    max-width: 1100px;
+    margin: 0 auto;
+    padding: 28px 24px 32px;
+  }
 
-  .cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 24px; }
+  .ons-header h1 {
+    margin: 0;
+    font-size: 32px;
+    font-weight: 700;
+    color: #222;
+  }
+
+  .ons-header__sub {
+    margin: 8px 0 0;
+    color: #555;
+    font-size: 17px;
+  }
+
+  .wrap {
+    max-width: 1100px;
+    margin: 0 auto;
+    padding: 32px 24px 64px;
+  }
+
+  .intro {
+    font-size: 16px;
+    color: #444;
+    max-width: 720px;
+    line-height: 1.6;
+    margin: 0 0 32px;
+  }
+
+  .cards {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+    gap: 24px;
+  }
 
   .card {
-    display: block; text-decoration: none; color: inherit; background: #fff;
-    border: 1px solid #d9d9d9; border-top: 4px solid #206095; padding: 24px;
+    display: block;
+    text-decoration: none;
+    color: inherit;
+    background: #fff;
+    border: 1px solid #d9d9d9;
+    border-top: 4px solid #206095;
+    padding: 24px;
     transition: box-shadow 0.15s, transform 0.15s;
   }
-  .card:hover { box-shadow: 0 6px 18px rgba(0,0,0,0.1); transform: translateY(-2px); }
-  .card:focus-visible { outline: 3px solid #fbc900; outline-offset: 2px; }
-  .card h2 { margin: 10px 0 12px; font-size: 22px; color: #003c57; }
-  .card p { font-size: 15px; color: #444; line-height: 1.6; margin: 0 0 18px; }
 
-  .card-tag { display: inline-block; font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; color: #0f8243; }
-  .card-link { font-weight: 700; color: #206095; font-size: 15px; }
+  .card:hover {
+    box-shadow: 0 6px 18px rgba(0,0,0,0.1);
+    transform: translateY(-2px);
+  }
 
-  .card--soon { border-top-color: #b0b0b0; background: #fafafa; cursor: default; }
-  .card--soon:hover { box-shadow: none; transform: none; }
-  .card--soon h2 { color: #555; }
-  .card-tag--soon { color: #777; }
-  .card-link--soon { color: #999; font-weight: 600; }
+  .card:focus-visible {
+    outline: 3px solid #fbc900;
+    outline-offset: 2px;
+  }
+
+  .card h2 {
+    margin: 10px 0 12px;
+    font-size: 22px;
+    color: #003c57;
+  }
+
+  .card p {
+    font-size: 15px;
+    color: #444;
+    line-height: 1.6;
+    margin: 0 0 18px;
+  }
+
+  .card-tag {
+    display: inline-block;
+    font-size: 12px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    color: #0f8243;
+  }
+
+  .card-link {
+    font-weight: 700;
+    color: #206095;
+    font-size: 15px;
+  }
 </style>
