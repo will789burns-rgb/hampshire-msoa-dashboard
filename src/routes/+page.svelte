@@ -12,10 +12,12 @@
   let selectedIndicator = $state('');
   let search = $state('');
   let view = $state('table');
+  let districtFilter = $state(''); // '' = all districts
 
   let L;
   let mapEl;
   let map;
+  let geoLayer;
 
   onMount(async () => {
     try {
@@ -67,6 +69,10 @@
     }
   });
 
+  const districts = $derived(
+    [...new Set(rows.map((r) => r.district))].filter(Boolean).sort((a, b) => a.localeCompare(b))
+  );
+
   const indicators = $derived(
     [...new Set(rows.filter((r) => r.topic === selectedTopic).map((r) => r.indicator))]
       .filter(Boolean)
@@ -79,8 +85,14 @@
     }
   });
 
-  const currentRows = $derived(
+  // All rows for the current indicator (used for stats/colours, before district filter)
+  const indicatorRows = $derived(
     rows.filter((r) => r.topic === selectedTopic && r.indicator === selectedIndicator && r.msoaCode)
+  );
+
+  // Rows after the district filter (drives table + map framing)
+  const currentRows = $derived(
+    districtFilter ? indicatorRows.filter((r) => r.district === districtFilter) : indicatorRows
   );
 
   const tableRows = $derived(
@@ -91,20 +103,24 @@
     })
   );
 
-  const measureNote = $derived(currentRows.find((r) => r.measure)?.measure ?? '');
-  const sourceNote = $derived(currentRows.find((r) => r.source)?.source ?? '');
+  const measureNote = $derived(indicatorRows.find((r) => r.measure)?.measure ?? '');
+  const sourceNote = $derived(indicatorRows.find((r) => r.source)?.source ?? '');
 
+  // Colour scale is based on ALL Hampshire values for the indicator, so colours stay comparable
   const valueByCode = $derived(
-    new Map(currentRows.map((r) => [r.msoaCode, Number(r.value)]).filter(([, v]) => !Number.isNaN(v)))
+    new Map(indicatorRows.map((r) => [r.msoaCode, Number(r.value)]).filter(([, v]) => !Number.isNaN(v)))
   );
+
+  // Codes that should be visible/framed (respect district filter)
+  const visibleCodes = $derived(new Set(currentRows.map((r) => r.msoaCode)));
 
   const stats = $derived.by(() => {
     const vals = [...valueByCode.values()];
-    if (!vals.length) return { min: 0, max: 0, avg: 0 };
+    if (!vals.length) return { min: 0, max: 0, avg: 0, mid: 0 };
     const min = Math.min(...vals);
     const max = Math.max(...vals);
     const avg = vals.reduce((a, b) => a + b, 0) / vals.length;
-    return { min, max, avg };
+    return { min, max, avg, mid: (min + max) / 2 };
   });
 
   function fmt(v) {
@@ -126,7 +142,6 @@
   function selectTopic(t) {
     selectedTopic = t;
     search = '';
-    if (view === 'map') refreshMap();
   }
 
   async function showMap() {
@@ -159,7 +174,6 @@
     map.invalidateSize();
   }
 
-  let geoLayer;
   function drawLayer() {
     if (!map || !L || !geo) return;
     if (geoLayer) {
@@ -167,7 +181,9 @@
       geoLayer = null;
     }
     const { min, max } = stats;
+
     geoLayer = L.geoJSON(geo, {
+      filter: (f) => visibleCodes.has(f.properties.MSOA21CD), // only draw selected areas
       style: (f) => {
         const v = valueByCode.get(f.properties.MSOA21CD);
         return {
@@ -180,7 +196,7 @@
       onEachFeature: (f, layer) => {
         const code = f.properties.MSOA21CD;
         const v = valueByCode.get(code);
-        const row = currentRows.find((r) => r.msoaCode === code);
+        const row = indicatorRows.find((r) => r.msoaCode === code);
         const name = row ? row.msoaName : f.properties.MSOA21NM ?? code;
         const dist = row ? row.district : '';
         layer.bindPopup(
@@ -193,29 +209,19 @@
         });
       }
     }).addTo(map);
-    const dataLayers = [];
-    geoLayer.eachLayer((lyr) => {
-      if (valueByCode.has(lyr.feature.properties.MSOA21CD)) dataLayers.push(lyr);
-    });
-    if (dataLayers.length) {
-      const group = L.featureGroup(dataLayers);
-      map.fitBounds(group.getBounds(), { padding: [10, 10] });
-    } else {
-      map.fitBounds(geoLayer.getBounds(), { padding: [10, 10] });
+
+    // Frame only the drawn (selected) areas
+    const bounds = geoLayer.getBounds();
+    if (bounds.isValid()) {
+      map.fitBounds(bounds, { padding: [12, 12] });
     }
   }
 
-  async function refreshMap() {
-    if (view === 'map' && map) {
-      drawLayer();
-    } else if (view === 'map') {
-      await buildMap();
-    }
-  }
-
-  // Redraw colours when the indicator changes while viewing the map
+  // Redraw when indicator, district filter or stats change while on the map
   $effect(() => {
     selectedIndicator;
+    districtFilter;
+    visibleCodes;
     valueByCode;
     if (view === 'map' && map) drawLayer();
   });
@@ -277,6 +283,14 @@
             </select>
           </label>
 
+          <label class="field">
+            <span>District</span>
+            <select bind:value={districtFilter}>
+              <option value="">All districts</option>
+              {#each districts as d}<option value={d}>{d}</option>{/each}
+            </select>
+          </label>
+
           {#if view === 'table'}
             <label class="field">
               <span>Search area</span>
@@ -325,10 +339,14 @@
             <p class="status">Map boundaries not found at <code>static/data/msoa-boundaries.geojson</code>.</p>
           {:else if valueByCode.size}
             <div class="legend">
-              <span class="legend-bar"></span>
-              <span class="legend-min">{fmt(stats.min)}</span>
-              <span class="legend-max">{fmt(stats.max)}</span>
-              <span class="legend-avg">Hampshire average: {fmt(stats.avg)}</span>
+              <div class="legend-title">{selectedIndicator}</div>
+              <div class="legend-bar"></div>
+              <div class="legend-ticks">
+                <span>{fmt(stats.min)}</span>
+                <span>{fmt(stats.mid)}</span>
+                <span>{fmt(stats.max)}</span>
+              </div>
+              <div class="legend-avg">Hampshire average: <strong>{fmt(stats.avg)}</strong></div>
             </div>
           {/if}
         {/if}
@@ -364,7 +382,7 @@
   .controls { display: flex; flex-wrap: wrap; gap: 16px; align-items: flex-end; margin-bottom: 18px; }
   .field { display: flex; flex-direction: column; gap: 6px; font-size: 14px; }
   .field span { font-weight: 600; }
-  select, input[type='text'] { font: inherit; font-size: 15px; padding: 9px 10px; border: 2px solid #222; border-radius: 0; background: #fff; min-width: 260px; }
+  select, input[type='text'] { font: inherit; font-size: 15px; padding: 9px 10px; border: 2px solid #222; border-radius: 0; background: #fff; min-width: 220px; }
   input[type='text'] { min-width: 200px; }
   select:focus, input:focus { outline: 3px solid #fbc900; box-shadow: inset 0 0 0 1px #222; }
 
@@ -388,9 +406,12 @@
   .empty { text-align: center; color: #707070; padding: 24px; }
 
   .map { height: 560px; width: 100%; border: 1px solid #d9d9d9; }
-  .legend { display: flex; align-items: center; gap: 12px; margin-top: 10px; font-size: 13px; color: #555; }
-  .legend-bar { width: 160px; height: 12px; background: linear-gradient(to right, #e6f3ff, #206095); border: 1px solid #ccc; }
-  .legend-avg { margin-left: auto; font-weight: 600; color: #206095; }
+
+  .legend { margin-top: 12px; max-width: 280px; }
+  .legend-title { font-size: 13px; font-weight: 600; color: #333; margin-bottom: 6px; }
+  .legend-bar { height: 14px; width: 100%; background: linear-gradient(to right, #e6f3ff, #206095); border: 1px solid #ccc; }
+  .legend-ticks { display: flex; justify-content: space-between; font-size: 12px; color: #555; margin-top: 4px; }
+  .legend-avg { font-size: 13px; color: #206095; margin-top: 8px; }
 
   .rowcount { font-size: 13px; color: #707070; margin: 10px 0 0; }
   .source { font-size: 12px; color: #909090; margin: 8px 0 0; }
