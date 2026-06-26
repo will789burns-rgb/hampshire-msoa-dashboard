@@ -12,7 +12,7 @@
   let selectedIndicator = $state('');
   let search = $state('');
   let view = $state('table');
-  let districtFilter = $state(''); // '' = all districts
+  let districtFilter = $state('');
 
   let L;
   let mapEl;
@@ -85,12 +85,10 @@
     }
   });
 
-  // All rows for the current indicator (used for stats/colours, before district filter)
   const indicatorRows = $derived(
     rows.filter((r) => r.topic === selectedTopic && r.indicator === selectedIndicator && r.msoaCode)
   );
 
-  // Rows after the district filter (drives table + map framing)
   const currentRows = $derived(
     districtFilter ? indicatorRows.filter((r) => r.district === districtFilter) : indicatorRows
   );
@@ -106,12 +104,10 @@
   const measureNote = $derived(indicatorRows.find((r) => r.measure)?.measure ?? '');
   const sourceNote = $derived(indicatorRows.find((r) => r.source)?.source ?? '');
 
-  // Colour scale is based on ALL Hampshire values for the indicator, so colours stay comparable
   const valueByCode = $derived(
     new Map(indicatorRows.map((r) => [r.msoaCode, Number(r.value)]).filter(([, v]) => !Number.isNaN(v)))
   );
 
-  // Codes that should be visible/framed (respect district filter)
   const visibleCodes = $derived(new Set(currentRows.map((r) => r.msoaCode)));
 
   const stats = $derived.by(() => {
@@ -122,6 +118,40 @@
     const avg = vals.reduce((a, b) => a + b, 0) / vals.length;
     return { min, max, avg, mid: (min + max) / 2 };
   });
+
+  // ---- Chart data ----
+  // All MSOAs for the indicator, sorted high to low, with a flag for whether each
+  // is in the selected district (when a filter is active).
+  const chartData = $derived.by(() => {
+    const data = indicatorRows
+      .map((r) => ({
+        name: r.msoaName,
+        district: r.district,
+        value: Number(r.value),
+        inFilter: !districtFilter || r.district === districtFilter
+      }))
+      .filter((d) => !Number.isNaN(d.value))
+      .sort((a, b) => b.value - a.value);
+    return data;
+  });
+
+  const chartMax = $derived(chartData.length ? Math.max(...chartData.map((d) => d.value)) : 0);
+  const chartMin = $derived(chartData.length ? Math.min(0, ...chartData.map((d) => d.value)) : 0);
+
+  // SVG geometry
+  const CH = { w: 820, h: 420, left: 8, right: 8, top: 16, bottom: 28 };
+  const plotW = $derived(CH.w - CH.left - CH.right);
+  const plotH = $derived(CH.h - CH.top - CH.bottom);
+  const barGap = 1;
+  const barW = $derived(chartData.length ? Math.max(1, plotW / chartData.length - barGap) : 0);
+
+  function xFor(i) { return CH.left + i * (plotW / Math.max(1, chartData.length)); }
+  function yFor(v) {
+    const range = chartMax - chartMin || 1;
+    return CH.top + plotH - ((v - chartMin) / range) * plotH;
+  }
+  function barHeight(v) { return CH.top + plotH - yFor(v); }
+  const avgY = $derived(yFor(stats.avg));
 
   function fmt(v) {
     if (v === null || v === undefined || String(v).trim() === '') return '—';
@@ -148,22 +178,19 @@
     view = 'map';
     await buildMap();
   }
-
   function showTable() {
     view = 'table';
-    if (map) {
-      map.remove();
-      map = null;
-    }
+    if (map) { map.remove(); map = null; }
+  }
+  function showChart() {
+    view = 'chart';
+    if (map) { map.remove(); map = null; }
   }
 
   async function buildMap() {
     await tick();
     if (!L || !geo || !mapEl) return;
-    if (map) {
-      map.remove();
-      map = null;
-    }
+    if (map) { map.remove(); map = null; }
     map = L.map(mapEl, { scrollWheelZoom: true }).setView([51.05, -1.3], 9);
     L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
       attribution: '© OpenStreetMap contributors',
@@ -176,22 +203,13 @@
 
   function drawLayer() {
     if (!map || !L || !geo) return;
-    if (geoLayer) {
-      geoLayer.remove();
-      geoLayer = null;
-    }
+    if (geoLayer) { geoLayer.remove(); geoLayer = null; }
     const { min, max } = stats;
-
     geoLayer = L.geoJSON(geo, {
-      filter: (f) => visibleCodes.has(f.properties.MSOA21CD), // only draw selected areas
+      filter: (f) => visibleCodes.has(f.properties.MSOA21CD),
       style: (f) => {
         const v = valueByCode.get(f.properties.MSOA21CD);
-        return {
-          fillColor: colorFor(v, min, max),
-          fillOpacity: v === undefined ? 0.15 : 0.8,
-          color: 'white',
-          weight: 1
-        };
+        return { fillColor: colorFor(v, min, max), fillOpacity: v === undefined ? 0.15 : 0.8, color: 'white', weight: 1 };
       },
       onEachFeature: (f, layer) => {
         const code = f.properties.MSOA21CD;
@@ -199,30 +217,19 @@
         const row = indicatorRows.find((r) => r.msoaCode === code);
         const name = row ? row.msoaName : f.properties.MSOA21NM ?? code;
         const dist = row ? row.district : '';
-        layer.bindPopup(
-          `<strong>${name}</strong><br>${dist ? dist + '<br>' : ''}` +
-            `${selectedIndicator}: <strong>${v === undefined ? 'No data' : fmt(v)}</strong>`
-        );
+        layer.bindPopup(`<strong>${name}</strong><br>${dist ? dist + '<br>' : ''}${selectedIndicator}: <strong>${v === undefined ? 'No data' : fmt(v)}</strong>`);
         layer.on({
           mouseover: (e) => e.target.setStyle({ weight: 3, color: '#333' }),
           mouseout: (e) => geoLayer.resetStyle(e.target)
         });
       }
     }).addTo(map);
-
-    // Frame only the drawn (selected) areas
     const bounds = geoLayer.getBounds();
-    if (bounds.isValid()) {
-      map.fitBounds(bounds, { padding: [12, 12] });
-    }
+    if (bounds.isValid()) map.fitBounds(bounds, { padding: [12, 12] });
   }
 
-  // Redraw when indicator, district filter or stats change while on the map
   $effect(() => {
-    selectedIndicator;
-    districtFilter;
-    visibleCodes;
-    valueByCode;
+    selectedIndicator; districtFilter; visibleCodes; valueByCode;
     if (view === 'map' && map) drawLayer();
   });
 
@@ -244,6 +251,8 @@
     a.click();
     URL.revokeObjectURL(url);
   }
+
+  let hover = $state(null); // {name, district, value, x, y}
 </script>
 
 <svelte:head>
@@ -261,9 +270,7 @@
   <div class="layout">
     <nav class="sidebar" aria-label="Sections">
       {#each SECTIONS as section}
-        <button class="nav-item" class:active={selectedTopic === section} onclick={() => selectTopic(section)}>
-          {section}
-        </button>
+        <button class="nav-item" class:active={selectedTopic === section} onclick={() => selectTopic(section)}>{section}</button>
       {/each}
     </nav>
 
@@ -306,32 +313,26 @@
         <div class="tabs">
           <button class="tab" class:active={view === 'table'} onclick={showTable}>Table</button>
           <button class="tab" class:active={view === 'map'} onclick={showMap}>Map</button>
+          <button class="tab" class:active={view === 'chart'} onclick={showChart}>Chart</button>
         </div>
 
         {#if view === 'table'}
           <div class="table-wrap">
             <table>
               <thead>
-                <tr>
-                  <th>District</th><th>MSOA</th><th>Code</th>
-                  <th class="num">Value</th><th class="num">Lower CI</th><th class="num">Upper CI</th>
-                </tr>
+                <tr><th>District</th><th>MSOA</th><th>Code</th><th class="num">Value</th><th class="num">Lower CI</th><th class="num">Upper CI</th></tr>
               </thead>
               <tbody>
                 {#each tableRows as r (r.msoaCode)}
-                  <tr>
-                    <td>{r.district}</td><td>{r.msoaName}</td><td>{r.msoaCode}</td>
-                    <td class="num">{fmt(r.value)}</td><td class="num">{fmt(r.lowerCI)}</td><td class="num">{fmt(r.upperCI)}</td>
-                  </tr>
+                  <tr><td>{r.district}</td><td>{r.msoaName}</td><td>{r.msoaCode}</td><td class="num">{fmt(r.value)}</td><td class="num">{fmt(r.lowerCI)}</td><td class="num">{fmt(r.upperCI)}</td></tr>
                 {/each}
-                {#if tableRows.length === 0}
-                  <tr><td colspan="6" class="empty">No data for this selection.</td></tr>
-                {/if}
+                {#if tableRows.length === 0}<tr><td colspan="6" class="empty">No data for this selection.</td></tr>{/if}
               </tbody>
             </table>
           </div>
           <p class="rowcount">{tableRows.length} areas shown</p>
-        {:else}
+
+        {:else if view === 'map'}
           {#key view}
             <div class="map" bind:this={mapEl}></div>
           {/key}
@@ -341,13 +342,49 @@
             <div class="legend">
               <div class="legend-title">{selectedIndicator}</div>
               <div class="legend-bar"></div>
-              <div class="legend-ticks">
-                <span>{fmt(stats.min)}</span>
-                <span>{fmt(stats.mid)}</span>
-                <span>{fmt(stats.max)}</span>
-              </div>
+              <div class="legend-ticks"><span>{fmt(stats.min)}</span><span>{fmt(stats.mid)}</span><span>{fmt(stats.max)}</span></div>
               <div class="legend-avg">Hampshire average: <strong>{fmt(stats.avg)}</strong></div>
             </div>
+          {/if}
+
+        {:else}
+          {#if chartData.length}
+            <p class="chart-caption">
+              MSOAs ranked by value, highest to lowest.
+              {#if districtFilter}<strong>{districtFilter}</strong> highlighted.{/if}
+              Dashed line = Hampshire average ({fmt(stats.avg)}).
+            </p>
+            <div class="chart-wrap">
+              <svg viewBox={`0 0 ${CH.w} ${CH.h}`} class="chart" role="img" aria-label="Ranked bar chart of MSOAs">
+                <!-- average line -->
+                <line x1={CH.left} x2={CH.w - CH.right} y1={avgY} y2={avgY} stroke="#d4351c" stroke-width="2" stroke-dasharray="6 4" />
+                <text x={CH.w - CH.right} y={avgY - 5} text-anchor="end" font-size="12" fill="#d4351c">Hampshire avg {fmt(stats.avg)}</text>
+
+                {#each chartData as d, i}
+                  <rect
+                    x={xFor(i)}
+                    y={yFor(d.value)}
+                    width={barW}
+                    height={barHeight(d.value)}
+                    fill={d.inFilter ? '#206095' : '#cfd8e0'}
+                    onmouseenter={() => (hover = { ...d, x: xFor(i) + barW / 2, y: yFor(d.value) })}
+                    onmouseleave={() => (hover = null)}
+                  />
+                {/each}
+
+                <!-- baseline -->
+                <line x1={CH.left} x2={CH.w - CH.right} y1={CH.top + plotH} y2={CH.top + plotH} stroke="#222" stroke-width="1" />
+              </svg>
+
+              {#if hover}
+                <div class="tip" style={`left:${(hover.x / CH.w) * 100}%; top:${(hover.y / CH.h) * 100}%;`}>
+                  <strong>{hover.name}</strong><br />{hover.district}<br />{fmt(hover.value)}
+                </div>
+              {/if}
+            </div>
+            <p class="rowcount">{chartData.filter((d) => d.inFilter).length} of {chartData.length} MSOAs highlighted</p>
+          {:else}
+            <p class="empty">No data for this selection.</p>
           {/if}
         {/if}
 
@@ -406,12 +443,18 @@
   .empty { text-align: center; color: #707070; padding: 24px; }
 
   .map { height: 560px; width: 100%; border: 1px solid #d9d9d9; }
-
   .legend { margin-top: 12px; max-width: 280px; }
   .legend-title { font-size: 13px; font-weight: 600; color: #333; margin-bottom: 6px; }
   .legend-bar { height: 14px; width: 100%; background: linear-gradient(to right, #e6f3ff, #206095); border: 1px solid #ccc; }
   .legend-ticks { display: flex; justify-content: space-between; font-size: 12px; color: #555; margin-top: 4px; }
   .legend-avg { font-size: 13px; color: #206095; margin-top: 8px; }
+
+  .chart-caption { font-size: 13px; color: #555; margin: 0 0 12px; }
+  .chart-wrap { position: relative; border: 1px solid #d9d9d9; padding: 8px; }
+  .chart { width: 100%; height: auto; display: block; }
+  .chart rect { cursor: pointer; }
+  .chart rect:hover { fill: #003c57 !important; }
+  .tip { position: absolute; transform: translate(-50%, -110%); background: #222; color: #fff; font-size: 12px; padding: 6px 8px; border-radius: 3px; pointer-events: none; white-space: nowrap; z-index: 5; }
 
   .rowcount { font-size: 13px; color: #707070; margin: 10px 0 0; }
   .source { font-size: 12px; color: #909090; margin: 8px 0 0; }
