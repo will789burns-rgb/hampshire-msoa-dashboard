@@ -5,7 +5,7 @@
     getTrendByType,
     getTrendRows
   } from '$lib/districtData.svelte.js';
-  import { fmt1, buildLineChart, buildStripPlot } from '$lib/charts.svelte.js';
+  import { fmt1, fmtVal, buildLineChart, buildStripPlot } from '$lib/charts.svelte.js';
 
   let {
     title,
@@ -18,6 +18,8 @@
     msoaIndicator = '',
     variationNote = '',
     unit = 'years',
+    decimals = 1,
+    higherIsBad = false,
     districtRows,
     msoaRows,
     selectedDistrict,
@@ -29,7 +31,19 @@
   function isSingleYear(label) {
     return /^\s*\d{4}\s*$/.test(String(label));
   }
+  // Obesity-style measures use academic years ("2024/25") and short pooled
+  // ranges; those ARE the real series (not duplicate pooled rows like LE had),
+  // so for non-single-year units we keep every period.
+  function trendYearOk(label) {
+    return unit === 'years' ? isSingleYear(label) : true;
+  }
 
+  // Local unit-aware value formatter (keeps LE on fmt1 for byte-identical output).
+  function fv(v) {
+    return unit === 'years' && decimals === 1 ? fmt1(v) : fmtVal(v, unit, decimals);
+  }
+
+  // ── Headline ─────────────────────────────────────────────────────────────
   function headline(sex) {
     const year = getLatestYear(districtRows, fingertipsIndicator, sex, '');
     const districtRow = districtRows.find(
@@ -49,13 +63,14 @@
   const headBySex = $derived(Object.fromEntries(heads.map((h) => [h.sex, h])));
   const hasHeadlineData = $derived(heads.some((h) => h.district != null));
 
+  // ── Trend ────────────────────────────────────────────────────────────────
   function trendDistrict(sex) {
     return getTrendRows(districtRows, fingertipsIndicator, selectedDistrict, sex, '')
-      .filter((r) => r.value != null && isSingleYear(r.year));
+      .filter((r) => r.value != null && trendYearOk(r.year));
   }
   function trendEngland(sex) {
     return getTrendByType(districtRows, fingertipsIndicator, 'england', sex, '')
-      .filter((r) => isSingleYear(r.year));
+      .filter((r) => trendYearOk(r.year));
   }
   const trends = $derived(
     usesFingertips && hasTrend && selectedDistrict
@@ -69,13 +84,16 @@
     const first = pts[0];
     const last = pts.at(-1);
     const diff = last.value - first.value;
-    const dir = Math.abs(diff) < 0.3 ? 'changed little' : diff > 0 ? 'risen' : 'fallen';
-    return `${label} ${title.toLowerCase()} has ${dir} from ${fmt1(first.value)} ${unit} (${first.year}) to ${fmt1(last.value)} ${unit} (${last.year}).`;
+    const near = unit === '%' ? 1.0 : 0.3;
+    const dir = Math.abs(diff) < near ? 'changed little' : diff > 0 ? 'risen' : 'fallen';
+    const subj = label === 'Persons' ? title.toLowerCase() : `${label} ${title.toLowerCase()}`;
+    return `${subj.charAt(0).toUpperCase() + subj.slice(1)} has ${dir} from ${fv(first.value)} (${first.year}) to ${fv(last.value)} (${last.year}).`;
   }
 
   const SERIES_COLORS = {
     Female: { district: '#206095', england: '#902082', eLabel: 'Eng (F)' },
-    Male: { district: '#0f8243', england: '#d07ac4', eLabel: 'Eng (M)' }
+    Male: { district: '#0f8243', england: '#d07ac4', eLabel: 'Eng (M)' },
+    Persons: { district: '#206095', england: '#902082', eLabel: 'England' }
   };
 
   const trendSVG = $derived.by(() => {
@@ -85,8 +103,9 @@
     const series = [];
     for (const t of trends) {
       const c = SERIES_COLORS[t.sex] ?? { district: '#206095', england: '#902082', eLabel: `Eng (${t.sex[0]})` };
+      const districtLabel = t.sex === 'Persons' ? selectedName : t.sex;
       series.push({
-        label: t.sex, color: c.district, width: 2.5, bold: true,
+        label: districtLabel, color: c.district, width: 2.5, bold: true,
         points: t.district.map((r) => ({ year: r.year, value: r.value }))
       });
       series.push({
@@ -97,6 +116,7 @@
     return buildLineChart(series);
   });
 
+  // ── Within-district variation (MSOA) ────────────────────────────────────
   const msoaVarRows = $derived(
     allowVariation && msoaIndicator
       ? msoaRows
@@ -143,21 +163,21 @@
       {#each sexes as sex}
         {@const h = headBySex[sex]}
         <div class="sex-block">
-          <h3>{sex}</h3>
+          {#if sex !== 'Persons'}<h3>{sex}</h3>{/if}
           <div class="stat-strip">
             <div class="stat-card">
               <div class="stat-card__label">{selectedName}</div>
-              <div class="stat-card__value">{fmt1(h?.district)}</div>
+              <div class="stat-card__value">{fv(h?.district)}</div>
               <div class="stat-card__note">{h?.year ?? ''}</div>
             </div>
             <div class="stat-card stat-card--green">
               <div class="stat-card__label">Hampshire</div>
-              <div class="stat-card__value">{fmt1(h?.hampshire)}</div>
+              <div class="stat-card__value">{fv(h?.hampshire)}</div>
               <div class="stat-card__note">{h?.year ?? ''}</div>
             </div>
             <div class="stat-card stat-card--purple">
               <div class="stat-card__label">England</div>
-              <div class="stat-card__value">{fmt1(h?.england)}</div>
+              <div class="stat-card__value">{fv(h?.england)}</div>
               <div class="stat-card__note">{h?.year ?? ''}</div>
             </div>
           </div>
@@ -180,11 +200,11 @@
         <h3>Variation within {selectedName}</h3>
         <p class="lede">
           Across {selectedName}'s {msoaVarRows.length} MSOAs, {title.toLowerCase()}
-          (all residents combined) ranges from <strong>{fmt1(msoaStats.min)}</strong>
-          {unit} in <strong>{msoaStats.lowest.name}</strong> up to
-          <strong>{fmt1(msoaStats.max)}</strong> {unit} in
+          ranges from <strong>{fv(msoaStats.min)}</strong>
+          in <strong>{msoaStats.lowest.name}</strong> up to
+          <strong>{fv(msoaStats.max)}</strong> in
           <strong>{msoaStats.highest.name}</strong>, a gap of
-          <strong>{fmt1(msoaStats.gap)}</strong> {unit} between the district's
+          <strong>{fv(msoaStats.gap)}</strong> between the district's
           highest and lowest MSOAs.
         </p>
         {@html stripSVG}

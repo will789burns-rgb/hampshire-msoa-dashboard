@@ -26,6 +26,32 @@ export function fmtInt(v) {
     return m ? parseInt(m[0], 10) : 0;
   }
   
+  // ── Unit-aware formatting & comparison ───────────────────────────────────────
+  // fmtVal(22.34, '%', 1)     -> "22.3%"
+  // fmtVal(83.27, 'years', 1) -> "83.3 years"
+  export function fmtVal(v, unit = '', decimals = 1) {
+    if (v === null || v === undefined || Number.isNaN(Number(v))) return '—';
+    const n = Number(v).toLocaleString('en-GB', {
+      minimumFractionDigits: decimals,
+      maximumFractionDigits: decimals
+    });
+    if (unit === '%') return `${n}%`;
+    if (unit) return `${n} ${unit}`;
+    return n;
+  }
+  
+  // Unit-aware "above/below/in line with England" phrasing.
+  export function compareToEngland(districtVal, englandVal, opts = {}) {
+    const { unit = 'years', decimals = 1, nearThreshold = unit === '%' ? 1.0 : 0.3 } = opts;
+    if (districtVal == null || englandVal == null) return '';
+    const diff = districtVal - englandVal;
+    const mag = Math.abs(diff);
+    const unitWord = unit === '%' ? 'percentage points' : unit;
+    const amount = `${mag.toFixed(decimals)} ${unitWord}`;
+    if (mag < nearThreshold) return 'broadly in line with England';
+    return diff > 0 ? `about ${amount} above England` : `about ${amount} below England`;
+  }
+  
   // ── Trend line chart (SVG) ───────────────────────────────────────────────────
   export function buildLineChart(series, width = 640, height = 280) {
     if (!series.length) return '';
@@ -50,8 +76,6 @@ export function fmtInt(v) {
       svg += `<line x1="0" y1="${y}" x2="${W}" y2="${y}" stroke="#e8e8e8" stroke-width="1"/>`;
       svg += `<text x="-8" y="${y + 4}" text-anchor="end" font-size="11" fill="#707070">${fmt1(t)}</text>`;
     }
-    // X-axis labels: pick a count based on widest label, always show first + last,
-    // and anchor the end labels so they don't spill past the chart edges.
     const longestLabel = Math.max(...allYears.map((y) => String(y).length));
     const approxLabelPx = longestLabel * 6.5;
     const maxLabels = Math.max(3, Math.min(7, Math.floor(W / (approxLabelPx + 16))));
@@ -94,7 +118,6 @@ export function fmtInt(v) {
   }
   
   // ── MSOA variation strip plot (SVG) ──────────────────────────────────────────
-  // Was inline in the report page; now takes the computed stats + rows as args.
   export function buildStripPlot(stats, rows) {
     const s = stats;
     if (!s || !rows.length) return '';
@@ -115,7 +138,7 @@ export function fmtInt(v) {
     svg += `<line x1="${x(s.avg)}" y1="${axisY - 18}" x2="${x(s.avg)}" y2="${axisY + 6}" stroke="#902082" stroke-width="2"/>`;
     svg += `<text x="${x(s.avg)}" y="${axisY - 22}" text-anchor="middle" font-size="10" fill="#902082" font-weight="700">District average ${fmt1(s.avg)}</text>`;
     for (const r of rows) {
-      svg += `<circle cx="${x(r.value)}" cy="${axisY}" r="5" fill="#206095" fill-opacity="0.5" stroke="#206095" stroke-width="1"><title>${r.name}: ${fmt1(r.value)} years</title></circle>`;
+      svg += `<circle cx="${x(r.value)}" cy="${axisY}" r="5" fill="#206095" fill-opacity="0.5" stroke="#206095" stroke-width="1"><title>${r.name}: ${fmt1(r.value)}</title></circle>`;
     }
     svg += `</g></svg>`;
     return svg;
