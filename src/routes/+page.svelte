@@ -48,7 +48,7 @@
         <p>
           A narrative area profile for a chosen district. Compares the district to
           Hampshire and England, summarises change over time, and shows how
-          neighbourhoods (MSOAs) vary within it.
+          MSOAs vary within it.
         </p>
         <span class="card-link">Open report →</span>
       </a>

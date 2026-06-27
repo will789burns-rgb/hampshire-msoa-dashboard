@@ -209,8 +209,11 @@
       svg += `<line x1="0" y1="${y}" x2="${W}" y2="${y}" stroke="#e8e8e8" stroke-width="1"/>`;
       svg += `<text x="-8" y="${y + 4}" text-anchor="end" font-size="11" fill="#707070">${fmt(t)}</text>`;
     }
+    // Show at most ~6 evenly spaced year labels so they don't overlap.
+    const maxLabels = 6;
+    const stepEvery = Math.max(1, Math.ceil(allYears.length / maxLabels));
     allYears.forEach((yr, i) => {
-      if (i % 2 === 0 || i === allYears.length - 1) {
+      if (i % stepEvery === 0 || i === allYears.length - 1) {
         svg += `<text x="${xScale(yr)}" y="${H + 20}" text-anchor="middle" font-size="11" fill="#707070">${yr}</text>`;
       }
     });
@@ -279,6 +282,7 @@
 <div class="page">
   <header class="ons-header">
     <div class="ons-header__inner">
+      <a href="/" class="back-link">← Back to all tools</a>
       <h1>District Local Statistics</h1>
       <p class="ons-header__sub">Hampshire district-level indicators · Source: OHID Fingertips</p>
     </div>

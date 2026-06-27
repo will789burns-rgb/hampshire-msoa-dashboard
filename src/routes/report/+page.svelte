@@ -72,7 +72,6 @@
   const leMale = $derived(selectedDistrict ? leHeadline('Male') : null);
   const leFemale = $derived(selectedDistrict ? leHeadline('Female') : null);
 
-  // Trend rows for the district, per sex (Fingertips)
   function leTrend(sex) {
     return districtStore.rows
       .filter(
@@ -97,7 +96,6 @@
   const trendFemaleEngland = $derived(selectedDistrict ? leTrendEngland('Female') : []);
   const trendMaleEngland = $derived(selectedDistrict ? leTrendEngland('Male') : []);
 
-  // Auto trend summary: compare earliest vs latest district value per sex
   function trendSummary(series, label) {
     const pts = series.filter((p) => p.value != null);
     if (pts.length < 2) return '';
@@ -109,7 +107,6 @@
   }
 
   // ── Within-district variation (MSOA — single combined LE figure) ──────────
-  // EXACT match so "Healthy life expectancy at birth (2018 to 2022)" is excluded.
   const MSOA_LE_INDICATOR = 'Life expectancy at birth (2018 to 2022)';
   const msoaLeRows = $derived(
     msoaStore.rows
@@ -155,10 +152,10 @@
     return diff > 0 ? `about ${absR} years above England` : `about ${absR} years below England`;
   }
 
-  // ── Trend line chart (SVG), adapted from /districts ───────────────────────
-  function buildLineChart(series, width = 640, height = 260) {
+  // ── Trend line chart (SVG) ────────────────────────────────────────────────
+  function buildLineChart(series, width = 640, height = 280) {
     if (!series.length) return '';
-    const pad = { top: 20, right: 130, bottom: 40, left: 56 };
+    const pad = { top: 20, right: 130, bottom: 56, left: 56 };
     const W = width - pad.left - pad.right;
     const H = height - pad.top - pad.bottom;
     const allYears = [...new Set(series.flatMap((s) => s.points.map((p) => p.year)))]
@@ -179,9 +176,12 @@
       svg += `<line x1="0" y1="${y}" x2="${W}" y2="${y}" stroke="#e8e8e8" stroke-width="1"/>`;
       svg += `<text x="-8" y="${y + 4}" text-anchor="end" font-size="11" fill="#707070">${fmt1(t)}</text>`;
     }
+    // X-axis labels: show ~5 evenly spaced, kept horizontal.
+    const maxLabels = 5;
+    const stepEvery = Math.max(1, Math.ceil(allYears.length / maxLabels));
     allYears.forEach((yr, i) => {
-      if (i % 2 === 0 || i === allYears.length - 1) {
-        svg += `<text x="${xScale(yr)}" y="${H + 20}" text-anchor="middle" font-size="10" fill="#707070">${yr}</text>`;
+      if (i % stepEvery === 0 || i === allYears.length - 1) {
+        svg += `<text x="${xScale(yr)}" y="${H + 18}" text-anchor="middle" font-size="10" fill="#707070">${yr}</text>`;
       }
     });
     const labels = [];
@@ -229,23 +229,18 @@
     const pad = { left: 20, right: 20, top: 28, bottom: 34 };
     const W = width - pad.left - pad.right;
     const axisY = 50;
-    // Pad the axis a touch beyond min/max so dots aren't on the edge
     const lo = Math.floor(s.min - 1);
     const hi = Math.ceil(s.max + 1);
     const x = (v) => ((v - lo) / (hi - lo)) * W;
     let svg = `<svg viewBox="0 0 ${width} ${height}" xmlns="http://www.w3.org/2000/svg" style="width:100%;height:auto;font-family:'Open Sans',Arial,sans-serif">`;
     svg += `<g transform="translate(${pad.left},0)">`;
-    // axis line
     svg += `<line x1="0" y1="${axisY}" x2="${W}" y2="${axisY}" stroke="#ccc" stroke-width="1"/>`;
-    // axis ticks (lo, mid, hi)
     [lo, Math.round((lo + hi) / 2), hi].forEach((t) => {
       svg += `<line x1="${x(t)}" y1="${axisY - 4}" x2="${x(t)}" y2="${axisY + 4}" stroke="#999"/>`;
       svg += `<text x="${x(t)}" y="${axisY + 20}" text-anchor="middle" font-size="11" fill="#707070">${t}</text>`;
     });
-    // district average marker
     svg += `<line x1="${x(s.avg)}" y1="${axisY - 18}" x2="${x(s.avg)}" y2="${axisY + 6}" stroke="#902082" stroke-width="2"/>`;
-    svg += `<text x="${x(s.avg)}" y="${axisY - 22}" text-anchor="middle" font-size="10" fill="#902082" font-weight="700">district avg ${fmt1(s.avg)}</text>`;
-    // dots
+    svg += `<text x="${x(s.avg)}" y="${axisY - 22}" text-anchor="middle" font-size="10" fill="#902082" font-weight="700">District average ${fmt1(s.avg)}</text>`;
     for (const r of msoaLeRows) {
       svg += `<circle cx="${x(r.value)}" cy="${axisY}" r="5" fill="#206095" fill-opacity="0.5" stroke="#206095" stroke-width="1"><title>${r.name}: ${fmt1(r.value)} years</title></circle>`;
     }
@@ -259,10 +254,12 @@
 </svelte:head>
 
 <main class="report">
+  <a href="/" class="back-link">← Back to all tools</a>
+
   <h1>Area Report</h1>
   <p class="intro">
     Choose a district to see a narrative profile comparing it to England and
-    Hampshire, with a look at how neighbourhoods (MSOAs) vary within it.
+    Hampshire, with a look at how MSOAs vary within it.
   </p>
 
   <label class="picker">
@@ -285,7 +282,7 @@
       <h2>{selectedName}</h2>
       <p class="lede">
         {selectedName} is home to around <strong>{fmtInt(districtPopulation)}</strong>
-        residents across <strong>{msoaCount}</strong> neighbourhoods (MSOAs). That's
+        residents across <strong>{msoaCount}</strong> MSOAs. That's
         about <strong>{popShare.toFixed(1)}%</strong> of Hampshire's population.
       </p>
       <div class="stat-strip">
@@ -295,7 +292,7 @@
           <div class="stat-card__note">Sum of MSOA estimates (2023)</div>
         </div>
         <div class="stat-card stat-card--green">
-          <div class="stat-card__label">Neighbourhoods (MSOAs)</div>
+          <div class="stat-card__label">MSOAs</div>
           <div class="stat-card__value">{msoaCount}</div>
           <div class="stat-card__note">Within {selectedName}</div>
         </div>
@@ -315,9 +312,7 @@
         <p class="lede">
           In {selectedName}, life expectancy at birth is
           <strong>{fmt1(leFemale?.district)}</strong> years for females and
-          <strong>{fmt1(leMale?.district)}</strong> years for males
-          {#if leFemale?.district != null && leFemale?.england != null}
-            — females are {vsEngland(leFemale.district, leFemale.england)}{/if}.
+          <strong>{fmt1(leMale?.district)}</strong> years for males{#if leFemale?.district != null && leFemale?.england != null}. Females are {vsEngland(leFemale.district, leFemale.england)}{/if}.
         </p>
 
         <div class="sex-block">
@@ -379,18 +374,19 @@
           <div class="variation">
             <h3>Variation within {selectedName}</h3>
             <p class="lede">
-              Across {selectedName}'s {msoaLeRows.length} neighbourhoods, life expectancy
+              Across {selectedName}'s {msoaLeRows.length} MSOAs, life expectancy
               (all residents combined) ranges from <strong>{fmt1(msoaLeStats.min)}</strong>
-              years in <strong>{msoaLeStats.lowest.name}</strong> to
+              years in <strong>{msoaLeStats.lowest.name}</strong> up to
               <strong>{fmt1(msoaLeStats.max)}</strong> years in
-              <strong>{msoaLeStats.highest.name}</strong> — a gap of
-              <strong>{fmt1(msoaLeStats.gap)}</strong> years.
+              <strong>{msoaLeStats.highest.name}</strong>, a gap of
+              <strong>{fmt1(msoaLeStats.gap)}</strong> years between the district's
+              healthiest and least healthy MSOAs.
             </p>
             {@html stripSVG}
             <p class="source">
-              Each dot is one neighbourhood (MSOA). Combined male and female figure, so
-              not directly comparable to the sex-specific values above.
-              Source: Hampshire Public Health Intelligence Team (2018–2022).
+              Each dot is one neighbourhood (MSOA). This is a combined male and female
+              figure, so it is not directly comparable to the sex-specific values above.
+              Source: Hampshire Public Health Intelligence Team (2018 to 2022).
             </p>
           </div>
         {/if}
@@ -410,6 +406,13 @@
   }
   h1 { color: #206095; font-weight: 700; }
   .intro { font-size: 1.05rem; line-height: 1.5; max-width: 60ch; }
+
+  .back-link {
+    display: inline-block; margin-bottom: 1rem; font-size: 14px;
+    font-weight: 600; color: #206095; text-decoration: none;
+  }
+  .back-link:hover { text-decoration: underline; }
+  .back-link:focus-visible { outline: 3px solid #fbc900; outline-offset: 2px; }
 
   .picker { display: flex; flex-direction: column; gap: 6px; margin: 1.5rem 0; max-width: 360px; }
   .picker__label { font-weight: 600; font-size: 14px; }

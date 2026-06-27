@@ -184,6 +184,7 @@
 <div class="page">
   <header class="ons-header">
     <div class="ons-header__inner">
+      <a href="/" class="back-link">← Back to all tools</a>
       <h1>JSNA Area Case Study Tool</h1>
       <p class="ons-header__sub">MSOA-level data summary across Hampshire</p>
     </div>
