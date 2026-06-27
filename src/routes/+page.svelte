@@ -67,7 +67,7 @@
     -webkit-font-smoothing: antialiased;
   }
 
-  .page { min-height: 100vh; }
+  .page { min-height: 100vh; } 
 
   .ons-header {
     border-bottom: 1px solid #d9d9d9;

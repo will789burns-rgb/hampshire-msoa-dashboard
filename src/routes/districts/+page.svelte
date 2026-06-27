@@ -259,6 +259,7 @@
     ]);
   });
 
+
   // ── Interactive benchmark hover ────────────────────────────────────────────
   let hover = $state(null); // { name, value, compared, x, y }
   function onBarEnter(r, e) {
