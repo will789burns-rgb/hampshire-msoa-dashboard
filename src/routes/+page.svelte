@@ -23,7 +23,6 @@
     <div class="cards">
       <!-- MSOA TOOL -->
       <a href="/explore" class="card">
-        <div class="card-tag">Available now</div>
         <h2>MSOA Data Summary</h2>
         <p>
           A snapshot of population and health indicators at neighbourhood (MSOA) level
@@ -33,15 +32,25 @@
         <span class="card-link">Open tool →</span>
       </a>
 
-      <!-- DISTRICTS TOOL (NOW LIVE) -->
+      <!-- DISTRICTS TOOL -->
       <a href="/districts" class="card">
-        <div class="card-tag">Available now</div>
         <h2>District Local Statistics</h2>
         <p>
           A Fingertips / OHID-style view of Hampshire's districts, with trends over time
           and comparisons against regional and national benchmarks, powered by live data feeds.
         </p>
         <span class="card-link">Open tool →</span>
+      </a>
+
+      <!-- AREA REPORT TOOL -->
+      <a href="/report" class="card">
+        <h2>Area Report</h2>
+        <p>
+          A narrative area profile for a chosen district. Compares the district to
+          Hampshire and England, summarises change over time, and shows how
+          neighbourhoods (MSOAs) vary within it.
+        </p>
+        <span class="card-link">Open report →</span>
       </a>
     </div>
   </div>
@@ -137,15 +146,6 @@
     color: #444;
     line-height: 1.6;
     margin: 0 0 18px;
-  }
-
-  .card-tag {
-    display: inline-block;
-    font-size: 12px;
-    font-weight: 700;
-    text-transform: uppercase;
-    letter-spacing: 0.5px;
-    color: #0f8243;
   }
 
   .card-link {
