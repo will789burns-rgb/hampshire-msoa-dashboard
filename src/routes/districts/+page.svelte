@@ -183,7 +183,7 @@
   // ── Trend line chart (SVG) ─────────────────────────────────────────────────
   function buildLineChart(series, width = 640, height = 280) {
     if (!series.length) return '';
-    const pad = { top: 20, right: 120, bottom: 40, left: 56 };
+    const pad = { top: 20, right: 140, bottom: 40, left: 56 };
     const W = width - pad.left - pad.right;
     const H = height - pad.top - pad.bottom;
 
@@ -209,13 +209,31 @@
       svg += `<line x1="0" y1="${y}" x2="${W}" y2="${y}" stroke="#e8e8e8" stroke-width="1"/>`;
       svg += `<text x="-8" y="${y + 4}" text-anchor="end" font-size="11" fill="#707070">${fmt(t)}</text>`;
     }
-    // Show at most ~6 evenly spaced year labels so they don't overlap.
-    const maxLabels = 6;
-    const stepEvery = Math.max(1, Math.ceil(allYears.length / maxLabels));
-    allYears.forEach((yr, i) => {
-      if (i % stepEvery === 0 || i === allYears.length - 1) {
-        svg += `<text x="${xScale(yr)}" y="${H + 20}" text-anchor="middle" font-size="11" fill="#707070">${yr}</text>`;
-      }
+    // X-axis labels: pick a small number based on how wide the widest label is,
+    // always include first + last, and align end labels so they don't spill.
+    const longestLabel = Math.max(...allYears.map((y) => String(y).length));
+    // Wider labels (e.g. "2012/13 - 14/15") need more room, so show fewer.
+    const approxLabelPx = longestLabel * 6.5; // ~6.5px per char at 10px font
+    const maxLabels = Math.max(3, Math.min(7, Math.floor(W / (approxLabelPx + 16))));
+    const lastIdx = allYears.length - 1;
+    const stepEvery = Math.max(1, Math.round(lastIdx / (maxLabels - 1)));
+
+    const shownIdx = new Set();
+    for (let i = 0; i <= lastIdx; i += stepEvery) shownIdx.add(i);
+    shownIdx.add(lastIdx); // always show the final year
+    // If the auto-step put a label very close to the last one, drop it to avoid crowding.
+    const secondLast = lastIdx - stepEvery;
+    if (lastIdx - secondLast < stepEvery * 0.6) shownIdx.delete(secondLast);
+
+    [...shownIdx].sort((a, b) => a - b).forEach((i) => {
+      const yr = allYears[i];
+      const xPos = xScale(yr);
+      // First label left-anchored, last right-anchored, middle ones centred —
+      // this stops the end labels spilling past the chart edges.
+      let anchor = 'middle';
+      if (i === 0) anchor = 'start';
+      else if (i === lastIdx) anchor = 'end';
+      svg += `<text x="${xPos}" y="${H + 22}" text-anchor="${anchor}" font-size="10" fill="#707070">${yr}</text>`;
     });
 
     // First pass: draw the lines and end dots, and collect label positions
@@ -241,7 +259,7 @@
     // Keep them inside the chart vertically
     for (const lab of labels) {
       lab.y = Math.max(8, Math.min(H, lab.y));
-      svg += `<text x="${W + 8}" y="${lab.y + 4}" font-size="11" fill="${lab.color}" font-weight="${lab.bold ? '700' : '400'}">${lab.label}</text>`;
+      svg += `<text x="${W + 16}" y="${lab.y + 4}" font-size="11" fill="${lab.color}" font-weight="${lab.bold ? '700' : '400'}">${lab.label}</text>`;
     }
     svg += `</g></svg>`;
     return svg;

@@ -1,5 +1,5 @@
 <script>
-  import { onMount } from 'svelte';
+  import { onMount, tick } from 'svelte';
   import {
     getDistrictStore,
     loadDistrictData,
@@ -31,9 +31,21 @@
     DISTRICTS.find((d) => d.code === selectedDistrict)?.name ?? ''
   );
 
-  onMount(() => {
+  // Leaflet + geojson
+  let L;
+  let districtGeo = $state(null);
+  let locatorEl;   // left map container
+  let msoaMapEl;   // right map container
+  let locatorMap;
+  let msoaMap;
+
+  onMount(async () => {
     loadDistrictData();
     loadData();
+    const leaflet = await import('leaflet');
+    L = leaflet.default ?? leaflet;
+    const res = await fetch('/data/hampshire-districts.geojson');
+    districtGeo = await res.json();
   });
 
   // ── Population overview (MSOA) ────────────────────────────────────────────
@@ -51,6 +63,11 @@
   const hampshirePopulation = $derived(popRows.reduce((sum, r) => sum + Number(r.value), 0));
   const popShare = $derived(
     hampshirePopulation ? (districtPopulation / hampshirePopulation) * 100 : 0
+  );
+
+  // Set of MSOA codes that belong to the selected district (for the detail map)
+  const districtMsoaCodes = $derived(
+    new Set(districtPopRows.map((r) => r.msoaCode))
   );
 
   // ── Life expectancy headline + trend (Fingertips) ─────────────────────────
@@ -152,10 +169,82 @@
     return diff > 0 ? `about ${absR} years above England` : `about ${absR} years below England`;
   }
 
+  // ── Maps ──────────────────────────────────────────────────────────────────
+  // Rebuild both maps whenever the district changes (and once Leaflet + geo are ready).
+  $effect(() => {
+    selectedDistrict; districtGeo; msoaStore.geo;
+    if (selectedDistrict && L) {
+      buildMaps();
+    }
+  });
+
+  async function buildMaps() {
+    await tick(); // wait for the map containers to exist in the DOM
+    buildLocator();
+    buildMsoaMap();
+  }
+
+  // LEFT: Hampshire districts, chosen one highlighted. No tiles — clean locator.
+  function buildLocator() {
+    if (!L || !districtGeo || !locatorEl) return;
+    if (locatorMap) { locatorMap.remove(); locatorMap = null; }
+    locatorMap = L.map(locatorEl, {
+      zoomControl: false, attributionControl: false,
+      dragging: false, scrollWheelZoom: false, doubleClickZoom: false,
+      boxZoom: false, keyboard: false, touchZoom: false
+    });
+    const layer = L.geoJSON(districtGeo, {
+      style: (f) => {
+        const isSel = f.properties.LAD23CD === selectedDistrict;
+        return {
+          fillColor: isSel ? '#206095' : '#e6eef5',
+          fillOpacity: isSel ? 0.9 : 0.6,
+          color: isSel ? '#003c57' : '#b9c9d6',
+          weight: isSel ? 2 : 1
+        };
+      }
+    }).addTo(locatorMap);
+    locatorMap.fitBounds(layer.getBounds(), { padding: [8, 8] });
+  }
+
+  // RIGHT: just the chosen district's MSOAs, semi-transparent over OSM tiles,
+  // with name popups so the geography underneath stays visible.
+  function buildMsoaMap() {
+    if (!L || !msoaStore.geo || !msoaMapEl) return;
+    if (msoaMap) { msoaMap.remove(); msoaMap = null; }
+    msoaMap = L.map(msoaMapEl, { scrollWheelZoom: true });
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      attribution: '© OpenStreetMap contributors', maxZoom: 18
+    }).addTo(msoaMap);
+
+    // Build a code→name lookup from the population rows for nicer popups.
+    const nameByCode = new Map(districtPopRows.map((r) => [r.msoaCode, r.msoaName]));
+
+    const layer = L.geoJSON(msoaStore.geo, {
+      filter: (f) => districtMsoaCodes.has(f.properties.MSOA21CD),
+      style: () => ({
+        fillColor: '#206095', fillOpacity: 0.35, color: '#206095', weight: 1.5
+      }),
+      onEachFeature: (f, lyr) => {
+        const code = f.properties.MSOA21CD;
+        const name = nameByCode.get(code) || f.properties.MSOA21NM || code;
+        lyr.bindPopup(`<strong>${name}</strong>`);
+        lyr.on({
+          mouseover: (e) => e.target.setStyle({ fillOpacity: 0.55, weight: 2.5 }),
+          mouseout: (e) => layer.resetStyle(e.target)
+        });
+      }
+    }).addTo(msoaMap);
+
+    const bounds = layer.getBounds();
+    if (bounds.isValid()) msoaMap.fitBounds(bounds, { padding: [12, 12] });
+    setTimeout(() => msoaMap && msoaMap.invalidateSize(), 0);
+  }
+
   // ── Trend line chart (SVG) ────────────────────────────────────────────────
   function buildLineChart(series, width = 640, height = 280) {
     if (!series.length) return '';
-    const pad = { top: 20, right: 130, bottom: 56, left: 56 };
+    const pad = { top: 20, right: 130, bottom: 44, left: 56 };
     const W = width - pad.left - pad.right;
     const H = height - pad.top - pad.bottom;
     const allYears = [...new Set(series.flatMap((s) => s.points.map((p) => p.year)))]
@@ -176,13 +265,25 @@
       svg += `<line x1="0" y1="${y}" x2="${W}" y2="${y}" stroke="#e8e8e8" stroke-width="1"/>`;
       svg += `<text x="-8" y="${y + 4}" text-anchor="end" font-size="11" fill="#707070">${fmt1(t)}</text>`;
     }
-    // X-axis labels: show ~5 evenly spaced, kept horizontal.
-    const maxLabels = 5;
-    const stepEvery = Math.max(1, Math.ceil(allYears.length / maxLabels));
-    allYears.forEach((yr, i) => {
-      if (i % stepEvery === 0 || i === allYears.length - 1) {
-        svg += `<text x="${xScale(yr)}" y="${H + 18}" text-anchor="middle" font-size="10" fill="#707070">${yr}</text>`;
-      }
+    // X-axis labels: pick a count based on widest label, always show first + last,
+    // and anchor the end labels so they don't spill past the chart edges.
+    const longestLabel = Math.max(...allYears.map((y) => String(y).length));
+    const approxLabelPx = longestLabel * 6.5;
+    const maxLabels = Math.max(3, Math.min(7, Math.floor(W / (approxLabelPx + 16))));
+    const lastIdx = allYears.length - 1;
+    const stepEvery = Math.max(1, Math.round(lastIdx / (maxLabels - 1)));
+    const shownIdx = new Set();
+    for (let i = 0; i <= lastIdx; i += stepEvery) shownIdx.add(i);
+    shownIdx.add(lastIdx);
+    const secondLast = lastIdx - stepEvery;
+    if (lastIdx - secondLast < stepEvery * 0.6) shownIdx.delete(secondLast);
+    [...shownIdx].sort((a, b) => a - b).forEach((i) => {
+      const yr = allYears[i];
+      const xPos = xScale(yr);
+      let anchor = 'middle';
+      if (i === 0) anchor = 'start';
+      else if (i === lastIdx) anchor = 'end';
+      svg += `<text x="${xPos}" y="${H + 22}" text-anchor="${anchor}" font-size="10" fill="#707070">${yr}</text>`;
     });
     const labels = [];
     for (const s of series) {
@@ -201,7 +302,7 @@
     }
     for (const lab of labels) {
       lab.y = Math.max(8, Math.min(H, lab.y));
-      svg += `<text x="${W + 8}" y="${lab.y + 4}" font-size="11" fill="${lab.color}" font-weight="${lab.bold ? '700' : '400'}">${lab.label}</text>`;
+      svg += `<text x="${W + 16}" y="${lab.y + 4}" font-size="11" fill="${lab.color}" font-weight="${lab.bold ? '700' : '400'}">${lab.label}</text>`;
     }
     svg += `</g></svg>`;
     return svg;
@@ -251,6 +352,7 @@
 
 <svelte:head>
   <title>Area Report — Hampshire JSNA</title>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
 </svelte:head>
 
 <main class="report">
@@ -301,6 +403,18 @@
           <div class="stat-card__value">{popShare.toFixed(1)}%</div>
           <div class="stat-card__note">Of county population</div>
         </div>
+      </div>
+
+      <!-- MAPS -->
+      <div class="maps-row">
+        <figure class="map-fig">
+          <figcaption>Where {selectedName} sits in Hampshire</figcaption>
+          <div class="locator-map" bind:this={locatorEl}></div>
+        </figure>
+        <figure class="map-fig">
+          <figcaption>MSOAs within {selectedName}</figcaption>
+          <div class="msoa-map" bind:this={msoaMapEl}></div>
+        </figure>
       </div>
     </section>
 
@@ -384,7 +498,7 @@
             </p>
             {@html stripSVG}
             <p class="source">
-              Each dot is one neighbourhood (MSOA). This is a combined male and female
+              Each dot is one MSOA. This is a combined male and female
               figure, so it is not directly comparable to the sex-specific values above.
               Source: Hampshire Public Health Intelligence Team (2018 to 2022).
             </p>
@@ -434,11 +548,19 @@
   .stat-card__value { font-size: 28px; font-weight: 700; color: #222; line-height: 1; }
   .stat-card__note { font-size: 12px; color: #909090; margin-top: 4px; }
 
+  .maps-row { display: flex; gap: 16px; margin-top: 1.25rem; }
+  .map-fig { flex: 1; margin: 0; min-width: 0; }
+  .map-fig figcaption { font-size: 13px; font-weight: 600; color: #444; margin-bottom: 6px; }
+  .locator-map, .msoa-map { height: 320px; width: 100%; border: 1px solid #d9d9d9; background: #f3f3f3; }
+
   .trend, .variation { margin-top: 1.5rem; }
   .trend-note { font-size: 14px; color: #444; line-height: 1.5; margin-top: 0.5rem; max-width: 62ch; }
 
   .placeholder, .hint { color: #666; font-style: italic; }
   .source { font-size: 12px; color: #909090; margin-top: 10px; max-width: 62ch; line-height: 1.5; }
 
+  @media (max-width: 760px) {
+    .maps-row { flex-direction: column; }
+  }
   @media (max-width: 700px) { .stat-strip { flex-direction: column; } }
 </style>
