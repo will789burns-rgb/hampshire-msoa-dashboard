@@ -5,6 +5,7 @@
 //      MSOA indicator from a Ctrl+F in msoa-summary.csv — verbatim, never approximate).
 //   3. Set the shape flags (hasHeadline / hasTrend / allowVariation).
 //   4. (Optional) give it a custom `intro(name, headBySex)` sentence.
+//   5. Set `topic` to group it under a heading (e.g. 'Demography', 'Healthy Lives').
 // Nothing in the page needs to change.
 
 import { fmt1, fmtVal, vsEngland, compareToEngland } from '$lib/charts.svelte.js';
@@ -14,6 +15,7 @@ import { fmt1, fmtVal, vsEngland, compareToEngland } from '$lib/charts.svelte.js
 export const MEASURES = [
   {
     key: 'life-expectancy',
+    topic: 'Demography',
     title: 'Life expectancy at birth',
     fingertipsIndicator: 'Life expectancy at birth',
     sexes: ['Female', 'Male'],
@@ -40,6 +42,7 @@ export const MEASURES = [
   },
   {
     key: 'healthy-life-expectancy',
+    topic: 'Demography',
     title: 'Healthy life expectancy at birth',
     fingertipsIndicator: '',     // not published in Fingertips at district level
     sexes: ['Female', 'Male'],
@@ -57,6 +60,7 @@ export const MEASURES = [
 
   ,{
     key: 'reception-overweight',
+    topic: 'Healthy Lives',
     title: 'Reception: overweight (including obesity)',
     fingertipsIndicator: 'Reception prevalence of overweight (including obesity)',
     sexes: ['Persons'],
@@ -84,6 +88,7 @@ export const MEASURES = [
   },
   {
     key: 'year6-overweight',
+    topic: 'Healthy Lives',
     title: 'Year 6: overweight (including obesity)',
     fingertipsIndicator: 'Year 6 prevalence of overweight (including obesity)',
     sexes: ['Persons'],

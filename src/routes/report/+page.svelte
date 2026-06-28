@@ -145,6 +145,13 @@
     Choose a district to see a narrative profile comparing it to England and
     Hampshire, with a look at how MSOAs vary within it.
   </p>
+  <p class="caveat">
+    A note on reading this report: district and MSOA figures may come from
+    different sources or be calculated differently, and because MSOAs cover
+    smaller populations their figures can be more volatile, modelled, or
+    unavailable for some indicators. Treat any district-to-MSOA differences as
+    broad context, not precise like-for-like gaps.
+  </p>
 
   <label class="picker">
     <span class="picker__label">Select a district</span>
@@ -164,6 +171,7 @@
     <!-- OVERVIEW -->
     <section class="overview">
       <h2>{selectedName}</h2>
+      <h3 class="topic-heading topic-heading--overview">Demography</h3>
       <p class="lede">
         {selectedName} is home to around <strong>{fmtInt(districtPopulation)}</strong>
         residents across <strong>{msoaCount}</strong> MSOAs. That's
@@ -200,8 +208,11 @@
       </div>
     </section>
 
-    <!-- MEASURES — one section per config entry -->
-    {#each MEASURES as m (m.key)}
+    <!-- MEASURES — grouped by topic, one section per config entry -->
+    {#each MEASURES as m, i (m.key)}
+      {#if m.topic !== 'Demography' && (i === 0 || MEASURES[i - 1].topic !== m.topic)}
+        <h2 class="topic-heading">{m.topic}</h2>
+      {/if}
       <MeasureSection
         title={m.title}
         intro={m.intro}
@@ -231,6 +242,17 @@
   }
   h1 { color: #206095; font-weight: 700; }
   .intro { font-size: 1.05rem; line-height: 1.5; max-width: 60ch; }
+  .caveat {
+    font-size: 14px; line-height: 1.55; color: #555; max-width: 62ch;
+    background: #f5f5f6; border-left: 4px solid #206095;
+    padding: 12px 16px; margin: 1rem 0 0;
+  }
+
+  .topic-heading {
+    font-size: 28px; font-weight: 700; color: #206095;
+    margin: 2.5rem 0 0; padding-bottom: 0.25rem;
+    border-bottom: 2px solid #206095;
+  }
 
   .back-link {
     display: inline-block; margin-bottom: 1rem; font-size: 14px;

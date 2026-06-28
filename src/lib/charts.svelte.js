@@ -135,8 +135,6 @@ export function fmtInt(v) {
       svg += `<line x1="${x(t)}" y1="${axisY - 4}" x2="${x(t)}" y2="${axisY + 4}" stroke="#999"/>`;
       svg += `<text x="${x(t)}" y="${axisY + 20}" text-anchor="middle" font-size="11" fill="#707070">${t}</text>`;
     });
-    svg += `<line x1="${x(s.avg)}" y1="${axisY - 18}" x2="${x(s.avg)}" y2="${axisY + 6}" stroke="#902082" stroke-width="2"/>`;
-    svg += `<text x="${x(s.avg)}" y="${axisY - 22}" text-anchor="middle" font-size="10" fill="#902082" font-weight="700">District average ${fmt1(s.avg)}</text>`;
     for (const r of rows) {
       svg += `<circle cx="${x(r.value)}" cy="${axisY}" r="5" fill="#206095" fill-opacity="0.5" stroke="#206095" stroke-width="1"><title>${r.name}: ${fmt1(r.value)}</title></circle>`;
     }
